@@ -17,19 +17,15 @@ import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
 import java.util.Enumeration;
+import java.util.Iterator;
+import java.util.Map;
 
 
 public class MainActivity extends Activity {
 
     private Simpleserver server;
 
-    private TextView textView;
-
-
-//    Nanoo nanoHTTPD;
-//    int port = 8080;
-//    File wwwroot;
-//    String hostaddres;
+    private String string;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -38,11 +34,45 @@ public class MainActivity extends Activity {
         setContentView(R.layout.activity_main);
 
         server = new Simpleserver();
-        try {
 
-            // 因为程序模拟的是html放置在asset目录下，
-            // 所以在这里存储一下AssetManager的指针。
-//            server.asset_mgr = this.getAssets();
+
+
+        //实现类(只举了一个例子)
+        class Query implements Simpleserver.IMiniPlugin{
+            @Override
+            public boolean isMatch(String path, String referer) {
+
+                return (path.equals("query"));
+
+            }
+
+            @Override
+            public String dealRequest(String path, Map<String, String> param) {
+                if (string!=null)
+                    string="";
+
+                for (Iterator iter = param.entrySet().iterator(); iter.hasNext(); ) {
+
+                    Map.Entry<String, String> entry = (Map.Entry<String, String>) iter.next();
+
+                    if (entry.getKey() != "NanoHttpd.QUERY_STRING") {
+
+                        if(string==null)
+                            string="key: " + entry.getKey() + " value: " + entry.getValue()+" ";
+                        else
+                            string=string+"key: " + entry.getKey() + " value: " + entry.getValue()+" ";
+                    }
+                }
+                return string+ " path: " + path;
+            }
+        }
+
+
+        //增加接口
+        server.AddIMiniPlugin(new Query());
+
+
+        try {
 
             // 启动web服务
             server.start();
@@ -52,23 +82,10 @@ public class MainActivity extends Activity {
             Log.w("Httpd", "The server could not start.");
         }
 
-        textView = (TextView)findViewById(R.id.text);
 
 
-//        try {
-//            nanoHTTPD = new Nanoo(port, wwwroot);
-//            hostaddres=nanoHTTPD.getLocalIpAddress();
-//            Log.i("HttpdDDDDDDDDDDDDDDDDDD", hostaddres);
-//        } catch (IOException ioe) {
-//
-//        }
 
     }
-
-
-
-
-
 
     @Override
     public void onDestroy()
@@ -80,8 +97,7 @@ public class MainActivity extends Activity {
             server.stop();
         }
         Log.w("Httpd", "The server stopped.");
-//        if (nanoHTTPD != null)
-//            nanoHTTPD.stop();
+
     }
 
     @Override

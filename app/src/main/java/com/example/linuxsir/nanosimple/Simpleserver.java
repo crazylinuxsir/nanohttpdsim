@@ -14,7 +14,10 @@ import java.util.*;
 public class Simpleserver extends com.example.linuxsir.nanosimple.test.NanoHTTPD  {
 
 
-    private Inface inface;
+
+    List<IMiniPlugin> list=new ArrayList<IMiniPlugin>();
+
+
 
     private String path;
 
@@ -27,7 +30,6 @@ public class Simpleserver extends com.example.linuxsir.nanosimple.test.NanoHTTPD
 
         super(8088);
 
-        inface = new Inface();
         
     }
 
@@ -36,52 +38,41 @@ public class Simpleserver extends com.example.linuxsir.nanosimple.test.NanoHTTPD
                           Map<String, String> parameters,
                           Map<String, String> files)
     {
-        String s=header.get("http-client-ip");
-        if(!s.equals("127.0.0.1"))
+
+        //判断连接ip是否为本地
+        String client=header.get("http-client-ip");
+        if(!client.equals("127.0.0.1"))
             return new Response(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not Found");
+
+
+
+        //判断跳转页Referer
+        String referer=header.get("referer");
+        if(referer==null){
+            //添加所需逻辑
+        }
+
+
+
 
        /**
         * START
         */
-
         path = uri.substring(1);
 
-        int i=1;
-
-
-        switch (i)
-        {
-            case 1:
-                if(inface.queryismatch(path)) {
-                    back=inface.querycontent(path,parameters);
-                    if(back!=null)
-                        return new com.example.linuxsir.nanosimple.test.NanoHTTPD.Response(back);
-                    return new Response(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not Found");
-                }
-            case 2:
-                if(inface.serverismatch(path)) {
-                    back=inface.querycontent(path,parameters);
-                    if(back!=null)
-                        return new com.example.linuxsir.nanosimple.test.NanoHTTPD.Response(back);
-                    return new Response(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not Found");
-                }
-            case 3:
-                if(inface.setismatch(path)) {
-                    back=inface.querycontent(path,parameters);
-                    if(back!=null)
-                        return new com.example.linuxsir.nanosimple.test.NanoHTTPD.Response(back);
-                    return new Response(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not Found");
-                }
-            case 4:
-                if(inface.startActivityismatch(path)) {
-                    back=inface.querycontent(path,parameters);
-                    if(back!=null)
-                        return new com.example.linuxsir.nanosimple.test.NanoHTTPD.Response(back);
-                    return new Response(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not Found");
-                }
-            default:
+        for(IMiniPlugin im : list){
+            if(im.isMatch(path,referer)){
+                back=im.dealRequest(path,parameters);
+                if(back!=null)
+                    return new com.example.linuxsir.nanosimple.test.NanoHTTPD.Response(back);
                 return new Response(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not Found");
+            }
+
         }
+
+        //没有所匹配的接口返回404
+        return new Response(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not Found");
+
         /**
          * END
          */
@@ -90,4 +81,29 @@ public class Simpleserver extends com.example.linuxsir.nanosimple.test.NanoHTTPD
 
     }
 
+
+    //接口
+    public interface IMiniPlugin {
+         boolean isMatch( String path , String referer);
+
+         String dealRequest( String path, Map<String, String> param );
+    }
+
+
+
+
+
+    //添加不同的接口实现类
+    public void AddIMiniPlugin(IMiniPlugin iMiniPlugin){
+
+        list.add(iMiniPlugin);
+
+    }
+
+
+
+
 }
+
+
+

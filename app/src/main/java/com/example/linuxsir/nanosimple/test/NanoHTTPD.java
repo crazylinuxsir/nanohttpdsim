@@ -315,29 +315,10 @@ public abstract class NanoHTTPD {
         Map<String, String> parms = session.getParms();
 
 
-//        for(Iterator iter=parms.entrySet().iterator();iter.hasNext();){
-//            Map.Entry<String, String> entry=(Map.Entry<String, String>)iter.next();
-//            System.out.println("key: "+entry.getKey()+" value: "+entry.getValue());
-//        }
-//
-//        System.out.println("000000000000000000000000000000");
-//        String path=session.getUri();
-//        path=path.substring(1);
 
         parms.put(QUERY_STRING_PARAMETER, session.getQueryParameterString());
 
-//        List<String>    list    =    new    ArrayList<String>();
-//
-//        for(int    i=0; i < list.size(); i++) {
-//            String    a    =    list.get(i);
-//
-//            if(a==path){
-//
-//            }
-//        }
-//
-//
-//        Log.i("Httpdddddddddddddddd", session.getUri());
+
 
         return serve(session.getUri(), method, session.getHeaders(), parms, files);
     }
@@ -932,6 +913,7 @@ public abstract class NanoHTTPD {
                 uri = pre.get("uri");
 
                 cookies = new CookieHandler(headers);//获取content-length
+
 
                 // Ok, now do the serve()  处理完header，然后开始处理body  parseBody
                 Response r = serve(this);
