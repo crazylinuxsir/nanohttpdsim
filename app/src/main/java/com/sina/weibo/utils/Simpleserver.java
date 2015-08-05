@@ -1,17 +1,12 @@
-package com.example.linuxsir.nanosimple;
-
-import android.content.res.AssetManager;
-import android.util.Log;
+package com.sina.weibo.utils;
 
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.*;
 
 /**
  * Created by linuxsir on 15/7/29.
  */
-public class Simpleserver extends com.example.linuxsir.nanosimple.test.NanoHTTPD  {
+public class Simpleserver extends com.sina.weibo.utils.weibohttpd.NanoHTTPD  {
 
 
 
@@ -64,7 +59,7 @@ public class Simpleserver extends com.example.linuxsir.nanosimple.test.NanoHTTPD
             if(im.isMatch(path,referer)){
                 back=im.dealRequest(path,parameters);
                 if(back!=null)
-                    return new com.example.linuxsir.nanosimple.test.NanoHTTPD.Response(back);
+                    return new com.sina.weibo.utils.weibohttpd.NanoHTTPD.Response(back);
                 return new Response(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not Found");
             }
 

@@ -1,19 +1,13 @@
-package com.example.linuxsir.nanosimple.test;
-
-import android.util.Log;
+package com.sina.weibo.utils.weibohttpd;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.Closeable;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintWriter;
-import java.io.RandomAccessFile;
 import java.io.SequenceInputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.InetAddress;
@@ -24,14 +18,11 @@ import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.net.URLDecoder;
 import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -112,11 +103,6 @@ public abstract class NanoHTTPD {
      */
     private AsyncRunner asyncRunner;
     /**
-     * Pluggable strategy for creating and cleaning up temporary files.
-     */
-    private TempFileManagerFactory tempFileManagerFactory;
-
-    /**
      * Constructs an HTTP server on given port.
      */
     public NanoHTTPD(int port) {
@@ -129,7 +115,6 @@ public abstract class NanoHTTPD {
     public NanoHTTPD(String hostname, int port) {
         this.hostname = hostname;
         this.myPort = port;
-        setTempFileManagerFactory(new DefaultTempFileManagerFactory());
         setAsyncRunner(new DefaultAsyncRunner());
     }
 
@@ -188,8 +173,7 @@ public abstract class NanoHTTPD {
                                     OutputStream outputStream = null;
                                     try {
                                         outputStream = finalAccept.getOutputStream();
-                                        TempFileManager tempFileManager = tempFileManagerFactory.create();
-                                        HTTPSession session = new HTTPSession(tempFileManager, inputStream, outputStream, finalAccept.getInetAddress());
+                                        HTTPSession session = new HTTPSession(inputStream, outputStream, finalAccept.getInetAddress());
                                         while (!finalAccept.isClosed()) {
                                             session.execute();
                                         }
@@ -303,13 +287,7 @@ public abstract class NanoHTTPD {
         Map<String, String> files = new HashMap<String, String>();
         Method method = session.getMethod();
         if (Method.PUT.equals(method) || Method.POST.equals(method)) {
-            try {
-                session.parseBody(files);
-            } catch (IOException ioe) {
-                return new Response(Response.Status.INTERNAL_ERROR, MIME_PLAINTEXT, "SERVER INTERNAL ERROR: IOException: " + ioe.getMessage());
-            } catch (ResponseException re) {
-                return new Response(re.getStatus(), MIME_PLAINTEXT, re.getMessage());
-            }
+            return new Response(Response.Status.METHOD_NOT_ALLOWED, MIME_PLAINTEXT, "Method Not Allowed");
         }
 
         Map<String, String> parms = session.getParms();
@@ -399,14 +377,6 @@ public abstract class NanoHTTPD {
     //
     // ------------------------------------------------------------------------------- //
 
-    /**
-     * Pluggable strategy for creating and cleaning up temporary files.
-     *
-     * @param tempFileManagerFactory new strategy for handling temp files.
-     */
-    public void setTempFileManagerFactory(TempFileManagerFactory tempFileManagerFactory) {
-        this.tempFileManagerFactory = tempFileManagerFactory;
-    }
 
     /**
      * HTTP Request methods, with the ability to decode a <code>String</code> back to its enum value.
@@ -434,37 +404,10 @@ public abstract class NanoHTTPD {
     /**
      * Factory to create temp file managers.
      */
-    public interface TempFileManagerFactory {
-        TempFileManager create();
-    }
 
     // ------------------------------------------------------------------------------- //
 
-    /**
-     * Temp file manager.
-     * <p/>
-     * <p>Temp file managers are created 1-to-1 with incoming requests, to create and cleanup
-     * temporary files created as a result of handling the request.</p>
-     */
-    public interface TempFileManager {
-        TempFile createTempFile() throws Exception;
 
-        void clear();
-    }
-
-    /**
-     * A temp file.
-     * <p/>
-     * <p>Temp files are responsible for managing the actual temporary storage and cleaning
-     * themselves up when no longer needed.</p>
-     */
-    public interface TempFile {
-        OutputStream open() throws Exception;
-
-        void delete() throws Exception;
-
-        String getName();
-    }
 
     /**
      * Default threading strategy for NanoHttpd.
@@ -486,74 +429,6 @@ public abstract class NanoHTTPD {
         }
     }
 
-    /**
-     * Default strategy for creating and cleaning up temporary files.
-     * <p/>
-     * <p></p>This class stores its files in the standard location (that is,
-     * wherever <code>java.io.tmpdir</code> points to).  Files are added
-     * to an internal list, and deleted when no longer needed (that is,
-     * when <code>clear()</code> is invoked at the end of processing a
-     * request).</p>
-     */
-    public static class DefaultTempFileManager implements TempFileManager {
-        private final String tmpdir;
-        private final List<TempFile> tempFiles;
-
-        public DefaultTempFileManager() {
-            tmpdir = System.getProperty("java.io.tmpdir");
-            tempFiles = new ArrayList<TempFile>();
-        }
-
-        @Override
-        public TempFile createTempFile() throws Exception {
-            DefaultTempFile tempFile = new DefaultTempFile(tmpdir);
-            tempFiles.add(tempFile);
-            return tempFile;
-        }
-
-        @Override
-        public void clear() {
-            for (TempFile file : tempFiles) {
-                try {
-                    file.delete();
-                } catch (Exception ignored) {
-                }
-            }
-            tempFiles.clear();
-        }
-    }
-
-    /**
-     * Default strategy for creating and cleaning up temporary files.
-     * <p/>
-     * <p></p></[>By default, files are created by <code>File.createTempFile()</code> in
-     * the directory specified.</p>
-     */
-    public static class DefaultTempFile implements TempFile {
-        private File file;
-        private OutputStream fstream;
-
-        public DefaultTempFile(String tempdir) throws IOException {
-            file = File.createTempFile("NanoHTTPD-", "", new File(tempdir));
-            fstream = new FileOutputStream(file);
-        }
-
-        @Override
-        public OutputStream open() throws Exception {
-            return fstream;
-        }
-
-        @Override
-        public void delete() throws Exception {
-            safeClose(fstream);
-            file.delete();
-        }
-
-        @Override
-        public String getName() {
-            return file.getAbsolutePath();
-        }
-    }
 
     /**
      * HTTP response. Return one of these from serve().
@@ -783,15 +658,6 @@ public abstract class NanoHTTPD {
         }
     }
 
-    /**
-     * Default strategy for creating and cleaning up temporary files.
-     */
-    private class DefaultTempFileManagerFactory implements TempFileManagerFactory {
-        @Override
-        public TempFileManager create() {
-            return new DefaultTempFileManager();
-        }
-    }
 
     /**
      * Handles one session, i.e. parses the HTTP request and returns the response.
@@ -814,18 +680,16 @@ public abstract class NanoHTTPD {
 
         InputStream getInputStream();
 
-        CookieHandler getCookies();
 
-        /**
-         * Adds the files in the request body to the files map.
-         * @arg files - map to modify
-         */
-        void parseBody(Map<String, String> files) throws IOException, ResponseException;
+//        /**
+//         * Adds the files in the request body to the files map.
+//         * @arg files - map to modify
+//         */
+//        void parseBody(Map<String, String> files) throws IOException, ResponseException;
     }
 
     protected class HTTPSession implements IHTTPSession {
         public static final int BUFSIZE = 8192;
-        private final TempFileManager tempFileManager;
         private final OutputStream outputStream;
         private InputStream inputStream;
         private int splitbyte;
@@ -834,17 +698,16 @@ public abstract class NanoHTTPD {
         private Method method;
         private Map<String, String> parms;
         private Map<String, String> headers;
-        private CookieHandler cookies;
         private String queryParameterString;
 
-        public HTTPSession(TempFileManager tempFileManager, InputStream inputStream, OutputStream outputStream) {
-            this.tempFileManager = tempFileManager;
+        public HTTPSession(InputStream inputStream, OutputStream outputStream) {
+            //this.tempFileManager = tempFileManager;
             this.inputStream = inputStream;
             this.outputStream = outputStream;
         }
 
-        public HTTPSession(TempFileManager tempFileManager, InputStream inputStream, OutputStream outputStream, InetAddress inetAddress) {
-            this.tempFileManager = tempFileManager;
+        public HTTPSession(InputStream inputStream, OutputStream outputStream, InetAddress inetAddress) {
+            //this.tempFileManager = tempFileManager;
             this.inputStream = inputStream;
             this.outputStream = outputStream;
             String remoteIp = inetAddress.isLoopbackAddress() || inetAddress.isAnyLocalAddress() ? "127.0.0.1" : inetAddress.getHostAddress().toString();
@@ -912,15 +775,12 @@ public abstract class NanoHTTPD {
 
                 uri = pre.get("uri");
 
-                cookies = new CookieHandler(headers);//获取content-length
-
 
                 // Ok, now do the serve()  处理完header，然后开始处理body  parseBody
                 Response r = serve(this);
                 if (r == null) {
                     throw new ResponseException(Response.Status.INTERNAL_ERROR, "SERVER INTERNAL ERROR: Serve() returned a null response.");
                 } else {
-                    cookies.unloadQueue(r);
                     r.setRequestMethod(method);
                     r.send(outputStream);
                 }
@@ -937,94 +797,10 @@ public abstract class NanoHTTPD {
                 Response r = new Response(re.getStatus(), MIME_PLAINTEXT, re.getMessage());
                 r.send(outputStream);
                 safeClose(outputStream);
-            } finally {
-                tempFileManager.clear();
             }
         }
 
-        @Override
-        public void parseBody(Map<String, String> files) throws IOException, ResponseException {
-            RandomAccessFile randomAccessFile = null;
-            BufferedReader in = null;
-            try {
 
-                randomAccessFile = getTmpBucket();
-
-                long size;
-                if (headers.containsKey("content-length")) {
-                    size = Integer.parseInt(headers.get("content-length"));
-                } else if (splitbyte < rlen) {
-                    size = rlen - splitbyte;
-                } else {
-                    size = 0;
-                }
-
-                // Now read all the body and write it to f
-                byte[] buf = new byte[512];
-                while (rlen >= 0 && size > 0) {
-                    rlen = inputStream.read(buf, 0, 512);
-                    size -= rlen;
-                    if (rlen > 0) {
-                        randomAccessFile.write(buf, 0, rlen);
-                    }
-                }
-
-                // Get the raw body as a byte []
-                ByteBuffer fbuf = randomAccessFile.getChannel().map(FileChannel.MapMode.READ_ONLY, 0, randomAccessFile.length());
-                randomAccessFile.seek(0);
-
-                // Create a BufferedReader for easily reading it as string.
-                InputStream bin = new FileInputStream(randomAccessFile.getFD());
-                in = new BufferedReader(new InputStreamReader(bin));
-
-                // If the method is POST, there may be parameters
-                // in data section, too, read it:
-                if (Method.POST.equals(method)) {
-                    String contentType = "";
-                    String contentTypeHeader = headers.get("content-type");
-
-                    StringTokenizer st = null;
-                    if (contentTypeHeader != null) {
-                        st = new StringTokenizer(contentTypeHeader, ",; ");
-                        if (st.hasMoreTokens()) {
-                            contentType = st.nextToken();
-                        }
-                    }
-
-                    if ("multipart/form-data".equalsIgnoreCase(contentType)) {
-                        // Handle multipart/form-data
-                        if (!st.hasMoreTokens()) {
-                            throw new ResponseException(Response.Status.BAD_REQUEST, "BAD REQUEST: Content type is multipart/form-data but boundary missing. Usage: GET /example/file.html");
-                        }
-
-                        String boundaryStartString = "boundary=";
-                        int boundaryContentStart = contentTypeHeader.indexOf(boundaryStartString) + boundaryStartString.length();
-                        String boundary = contentTypeHeader.substring(boundaryContentStart, contentTypeHeader.length());
-                        if (boundary.startsWith("\"") && boundary.endsWith("\"")) {
-                            boundary = boundary.substring(1, boundary.length() - 1);
-                        }
-
-                        decodeMultipartData(boundary, fbuf, in, parms, files);  //decodeMultipartData作用是将post中上传文件的内容解析出来
-                    } else {
-                        // Handle application/x-www-form-urlencoded
-                        String postLine = "";
-                        char pbuf[] = new char[512];
-                        int read = in.read(pbuf);
-                        while (read >= 0 && !postLine.endsWith("\r\n")) {  //普通的表单提交的话，就循环读取post body直到结束(\r\n)为止。
-                            postLine += String.valueOf(pbuf, 0, read);
-                            read = in.read(pbuf);
-                        }
-                        postLine = postLine.trim();
-                        decodeParms(postLine, parms);   //decodeParms作用是将post中含有%的值使用URLDecoder.decode解码出来
-                    }
-                } else if (Method.PUT.equals(method)) {
-                    files.put("content", saveTmpFile(fbuf, 0, fbuf.limit()));
-                }
-            } finally {
-                safeClose(randomAccessFile);
-                safeClose(in);
-            }
-        }
 
         /**
          * Decodes the sent headers and loads the data into Key/value pairs
@@ -1083,76 +859,7 @@ public abstract class NanoHTTPD {
         /**
          * Decodes the Multipart Body data and put it into Key/Value pairs.
          */
-        private void decodeMultipartData(String boundary, ByteBuffer fbuf, BufferedReader in, Map<String, String> parms,
-                                         Map<String, String> files) throws ResponseException {
-            try {
-                int[] bpositions = getBoundaryPositions(fbuf, boundary.getBytes());
-                int boundarycount = 1;
-                String mpline = in.readLine();
-                while (mpline != null) {
-                    if (!mpline.contains(boundary)) {
-                        throw new ResponseException(Response.Status.BAD_REQUEST, "BAD REQUEST: Content type is multipart/form-data but next chunk does not start with boundary. Usage: GET /example/file.html");
-                    }
-                    boundarycount++;
-                    Map<String, String> item = new HashMap<String, String>();
-                    mpline = in.readLine();
-                    while (mpline != null && mpline.trim().length() > 0) {
-                        int p = mpline.indexOf(':');
-                        if (p != -1) {
-                            item.put(mpline.substring(0, p).trim().toLowerCase(Locale.US), mpline.substring(p + 1).trim());
-                        }
-                        mpline = in.readLine();
-                    }
-                    if (mpline != null) {
-                        String contentDisposition = item.get("content-disposition");
-                        if (contentDisposition == null) {
-                            throw new ResponseException(Response.Status.BAD_REQUEST, "BAD REQUEST: Content type is multipart/form-data but no content-disposition info found. Usage: GET /example/file.html");
-                        }
-                        StringTokenizer st = new StringTokenizer(contentDisposition, "; ");
-                        Map<String, String> disposition = new HashMap<String, String>();
-                        while (st.hasMoreTokens()) {
-                            String token = st.nextToken();
-                            int p = token.indexOf('=');
-                            if (p != -1) {
-                                disposition.put(token.substring(0, p).trim().toLowerCase(Locale.US), token.substring(p + 1).trim());
-                            }
-                        }
-                        String pname = disposition.get("name");
-                        pname = pname.substring(1, pname.length() - 1);
-
-                        String value = "";
-                        if (item.get("content-type") == null) {
-                            while (mpline != null && !mpline.contains(boundary)) {
-                                mpline = in.readLine();
-                                if (mpline != null) {
-                                    int d = mpline.indexOf(boundary);
-                                    if (d == -1) {
-                                        value += mpline;
-                                    } else {
-                                        value += mpline.substring(0, d - 2);
-                                    }
-                                }
-                            }
-                        } else {
-                            if (boundarycount > bpositions.length) {
-                                throw new ResponseException(Response.Status.INTERNAL_ERROR, "Error processing request");
-                            }
-                            int offset = stripMultipartHeaders(fbuf, bpositions[boundarycount - 2]);
-                            String path = saveTmpFile(fbuf, offset, bpositions[boundarycount - 1] - offset - 4);
-                            files.put(pname, path);
-                            value = disposition.get("filename");
-                            value = value.substring(1, value.length() - 1);
-                            do {
-                                mpline = in.readLine();
-                            } while (mpline != null && !mpline.contains(boundary));
-                        }
-                        parms.put(pname, value);
-                    }
-                }
-            } catch (IOException ioe) {
-                throw new ResponseException(Response.Status.INTERNAL_ERROR, "SERVER INTERNAL ERROR: IOException: " + ioe.getMessage(), ioe);
-            }
-        }
+//
 
         /**
          * Find byte index separating header from body. It must be the last byte of the first two sequential new lines.
@@ -1201,49 +908,12 @@ public abstract class NanoHTTPD {
         /**
          * Retrieves the content of a sent file and saves it to a temporary file. The full path to the saved file is returned.
          */
-        private String saveTmpFile(ByteBuffer b, int offset, int len) {
-            String path = "";
-            if (len > 0) {
-                FileOutputStream fileOutputStream = null;
-                try {
-                    TempFile tempFile = tempFileManager.createTempFile();
-                    ByteBuffer src = b.duplicate();
-                    fileOutputStream = new FileOutputStream(tempFile.getName());
-                    FileChannel dest = fileOutputStream.getChannel();
-                    src.position(offset).limit(offset + len);
-                    dest.write(src.slice());
-                    path = tempFile.getName();
-                } catch (Exception e) { // Catch exception if any
-                    System.err.println("Error: " + e.getMessage());
-                } finally {
-                    safeClose(fileOutputStream);
-                }
-            }
-            return path;
-        }
-        //创建临时文件
-        private RandomAccessFile getTmpBucket() {
-            try {
-                TempFile tempFile = tempFileManager.createTempFile();
-                return new RandomAccessFile(tempFile.getName(), "rw");
-            } catch (Exception e) {
-                System.err.println("Error: " + e.getMessage());
-            }
-            return null;
-        }
+
 
         /**
          * It returns the offset separating multipart file headers from the file's data.
          */
-        private int stripMultipartHeaders(ByteBuffer b, int offset) {
-            int i;
-            for (i = offset; i < b.limit(); i++) {
-                if (b.get(i) == '\r' && b.get(++i) == '\n' && b.get(++i) == '\r' && b.get(++i) == '\n') {
-                    break;
-                }
-            }
-            return i + 1;
-        }
+
 
         /**
          * Decodes parameters in percent-encoded URI-format ( e.g. "name=Jack%20Daniels&pass=Single%20Malt" ) and
@@ -1298,116 +968,10 @@ public abstract class NanoHTTPD {
             return inputStream;
         }
 
-        @Override
-        public CookieHandler getCookies() {
-            return cookies;
-        }
+
     }
 
-    public static class Cookie {
-        private String n, v, e;
 
-        public Cookie(String name, String value, String expires) {
-            n = name;
-            v = value;
-            e = expires;
-        }
 
-        public Cookie(String name, String value) {
-            this(name, value, 30);
-        }
 
-        public Cookie(String name, String value, int numDays) {
-            n = name;
-            v = value;
-            e = getHTTPTime(numDays);
-        }
-
-        public String getHTTPHeader() {
-            String fmt = "%s=%s; expires=%s";
-            return String.format(fmt, n, v, e);
-        }
-
-        public static String getHTTPTime(int days) {
-            Calendar calendar = Calendar.getInstance();
-            SimpleDateFormat dateFormat = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss z", Locale.US);
-            dateFormat.setTimeZone(TimeZone.getTimeZone("GMT"));
-            calendar.add(Calendar.DAY_OF_MONTH, days);
-            return dateFormat.format(calendar.getTime());
-        }
-    }
-
-    /**
-     * Provides rudimentary support for cookies.
-     * Doesn't support 'path', 'secure' nor 'httpOnly'.
-     * Feel free to improve it and/or add unsupported features.
-     *
-     * @author LordFokas
-     */
-    public class CookieHandler implements Iterable<String> {
-        private HashMap<String, String> cookies = new HashMap<String, String>();
-        private ArrayList<Cookie> queue = new ArrayList<Cookie>();
-
-        public CookieHandler(Map<String, String> httpHeaders) {
-            String raw = httpHeaders.get("cookie");
-            if (raw != null) {
-                String[] tokens = raw.split(";");
-                for (String token : tokens) {
-                    String[] data = token.trim().split("=");
-                    if (data.length == 2) {
-                        cookies.put(data[0], data[1]);
-                    }
-                }
-            }
-        }
-
-        @Override public Iterator<String> iterator() {
-            return cookies.keySet().iterator();
-        }
-
-        /**
-         * Read a cookie from the HTTP Headers.
-         *
-         * @param name The cookie's name.
-         * @return The cookie's value if it exists, null otherwise.
-         */
-        public String read(String name) {
-            return cookies.get(name);
-        }
-
-        /**
-         * Sets a cookie.
-         *
-         * @param name    The cookie's name.
-         * @param value   The cookie's value.
-         * @param expires How many days until the cookie expires.
-         */
-        public void set(String name, String value, int expires) {
-            queue.add(new Cookie(name, value, Cookie.getHTTPTime(expires)));
-        }
-
-        public void set(Cookie cookie) {
-            queue.add(cookie);
-        }
-
-        /**
-         * Set a cookie with an expiration date from a month ago, effectively deleting it on the client side.
-         *
-         * @param name The cookie name.
-         */
-        public void delete(String name) {
-            set(name, "-delete-", -30);
-        }
-
-        /**
-         * Internally used by the webserver to add all queued cookies into the Response's HTTP Headers.
-         *
-         * @param response The Response object to which headers the queued cookies will be added.
-         */
-        public void unloadQueue(Response response) {
-            for (Cookie cookie : queue) {
-                response.addHeader("Set-Cookie", cookie.getHTTPHeader());
-            }
-        }
-    }
 }

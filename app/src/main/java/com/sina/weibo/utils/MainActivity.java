@@ -1,22 +1,13 @@
-package com.example.linuxsir.nanosimple;
+package com.sina.weibo.utils;
 
 import android.app.Activity;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
-import android.widget.TextView;
 
-import com.example.linuxsir.nanosimple.test2.Nanoo;
 
-import org.apache.http.conn.util.InetAddressUtils;
-
-import java.io.File;
 import java.io.IOException;
-import java.net.InetAddress;
-import java.net.NetworkInterface;
-import java.net.SocketException;
-import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.Map;
 
